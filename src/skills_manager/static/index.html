@@ -8,35 +8,50 @@
   </head>
   <body>
     <main class="shell">
-      <header>
+      <header class="hero">
         <div>
           <p class="eyebrow">LOCAL SKILLS MANAGER</p>
-          <h1>个人 Skills Manager</h1>
-          <p class="subtitle">中央目录中的每个一级文件夹都是一个完整项目。</p>
+          <h1>Skills 工作台</h1>
+          <p class="subtitle">从中央目录管理项目，并按需查看项目中包含的 Skills。</p>
         </div>
         <button id="refresh" class="secondary" type="button">刷新</button>
       </header>
 
-      <section class="library-card">
-        <label for="state-file">状态文件</label>
-        <form id="state-file-form">
-          <input id="state-file" name="state-file" placeholder="例如：~/skills-manager-state.json" autocomplete="off">
-          <button type="submit">切换状态文件</button>
-        </form>
-        <p class="field-help">默认使用 ~/skills-manager-state.json；可在此切换到其他状态文件。</p>
+      <section id="summary" class="summary" aria-label="项目概览"></section>
+
+      <details class="settings">
+        <summary>设置与目录</summary>
+        <div class="settings-grid">
+          <section>
+            <label for="state-file">状态文件</label>
+            <form id="state-file-form">
+              <input id="state-file" name="state-file" placeholder="例如：~/skills-manager-state.json" autocomplete="off">
+              <button type="submit">切换</button>
+            </form>
+            <p class="field-help">默认保存到 ~/skills-manager-state.json。</p>
+          </section>
+
+          <section>
+            <label for="library">Skills 中央目录</label>
+            <form id="library-form">
+              <input id="library" name="library" placeholder="例如：~/Documents/skills-library" autocomplete="off">
+              <button type="submit">保存</button>
+            </form>
+            <p class="field-help">首页只读取一级项目；展开项目后才扫描其中的 SKILL.md。</p>
+          </section>
+        </div>
+      </details>
+
+      <section class="toolbar" aria-label="搜索与筛选">
+        <input id="search" type="search" placeholder="搜索项目、标签或已展开的 Skill" autocomplete="off">
+        <div id="tag-filters" class="tag-filters"></div>
+        <button id="batch-select-toggle" class="secondary batch-select-toggle" type="button">批量选择</button>
       </section>
 
-      <section class="library-card">
-        <label for="library">Skills 中央目录</label>
-        <form id="library-form">
-          <input id="library" name="library" placeholder="例如：~/Documents/skills-library" autocomplete="off">
-          <button type="submit">保存并读取</button>
-        </form>
-        <p class="field-help">只读取该目录下的一级文件夹，不扫描文件夹内部。</p>
-      </section>
+      <section id="batch-editor" class="batch-editor" hidden></section>
 
       <div id="message" role="status" aria-live="polite"></div>
-      <section id="content"></section>
+      <section id="content" class="project-list"></section>
     </main>
     <script src="/app.js"></script>
   </body>

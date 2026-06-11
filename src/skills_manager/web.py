@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
+import platform
+import subprocess
 import threading
 import webbrowser
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Mapping
-from urllib.parse import urlparse
+from typing import Any, Callable, Mapping
+from urllib.parse import parse_qs, urlparse
 
 from .core import (
     DEFAULT_STATE_FILE,
@@ -23,10 +25,26 @@ from .core import (
 STATIC_DIR = Path(__file__).with_name("static")
 
 
+def open_folder(path: Path) -> None:
+    system = platform.system()
+    if system == "Darwin":
+        command = ["open", str(path)]
+    elif system == "Windows":
+        command = ["explorer", str(path)]
+    else:
+        command = ["xdg-open", str(path)]
+    subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
 @dataclass
 class WebContext:
     state_file: Path
     agent_paths: Mapping[str, str | Path] | None = None
+    folder_opener: Callable[[Path], None] = open_folder
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def select_state_file(self, value: str) -> None:
@@ -49,14 +67,35 @@ class WebContext:
         result["state_file_path"] = str(state_file)
         return result
 
+    def open_project_folder(self, project: str, skill: str | None) -> Path:
+        folder = self.manager().project_folder(project, skill)
+        self.folder_opener(folder)
+        return folder
+
 
 class SkillsManagerHandler(BaseHTTPRequestHandler):
     context: WebContext
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path == "/api/state":
             self.send_json(HTTPStatus.OK, self.context.dashboard())
+            return
+        if path == "/api/project-details":
+            try:
+                project = parse_qs(parsed.query)["project"][0]
+                skills = self.context.manager().project_skills(project)
+                self.send_json(
+                    HTTPStatus.OK,
+                    {"project": project, "skills": skills},
+                )
+            except (KeyError, IndexError):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "请求参数不完整"})
+            except SkillsManagerError as exc:
+                self.send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
+            except OSError as exc:
+                self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(exc)})
             return
         static_files = {
             "/": ("index.html", "text/html; charset=utf-8"),
@@ -101,6 +140,42 @@ class SkillsManagerHandler(BaseHTTPRequestHandler):
                     payload["agent"],
                     payload["enabled"],
                 )
+            elif path == "/api/tags":
+                if (
+                    not isinstance(payload["project"], str)
+                    or not isinstance(payload["tags"], list)
+                    or not all(isinstance(tag, str) for tag in payload["tags"])
+                ):
+                    raise TypeError
+                self.context.manager().set_project_tags(
+                    payload["project"],
+                    payload["tags"],
+                )
+            elif path == "/api/tags/batch":
+                if (
+                    not isinstance(payload["projects"], list)
+                    or not all(
+                        isinstance(project, str) for project in payload["projects"]
+                    )
+                    or not isinstance(payload["tags"], list)
+                    or not all(isinstance(tag, str) for tag in payload["tags"])
+                    or not isinstance(payload["action"], str)
+                ):
+                    raise TypeError
+                self.context.manager().update_project_tags(
+                    payload["projects"],
+                    payload["tags"],
+                    payload["action"],
+                )
+            elif path == "/api/open-folder":
+                if not isinstance(payload["project"], str):
+                    raise TypeError
+                skill = payload.get("skill")
+                if skill is not None and not isinstance(skill, str):
+                    raise TypeError
+                folder = self.context.open_project_folder(payload["project"], skill)
+                self.send_json(HTTPStatus.OK, {"opened": str(folder)})
+                return
             else:
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "接口不存在"})
                 return
@@ -133,10 +208,12 @@ def create_server(
     host: str,
     port: int,
     agent_paths: Mapping[str, str | Path] | None = None,
+    folder_opener: Callable[[Path], None] = open_folder,
 ) -> ThreadingHTTPServer:
     context = WebContext(
         state_file=expand_path(state_file),
         agent_paths=agent_paths,
+        folder_opener=folder_opener,
     )
     handler = type(
         "ConfiguredSkillsManagerHandler",

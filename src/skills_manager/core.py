@@ -19,6 +19,14 @@ AGENT_LABELS = {
     "codex": "Codex",
     "claude": "Claude Code",
 }
+SKILL_SCAN_IGNORED_DIRS = {
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+}
 
 
 class SkillsManagerError(Exception):
@@ -78,6 +86,7 @@ def default_state() -> dict[str, Any]:
         "version": STATE_VERSION,
         "library_path": None,
         "deployments": {},
+        "project_metadata": {},
     }
 
 
@@ -122,6 +131,7 @@ class SkillsManager:
     ):
         self.store = store
         self.state = store.load()
+        self.state.setdefault("project_metadata", {})
         configured_agents = agent_paths or DEFAULT_AGENTS
         self.agents = {
             name: expand_path(configured_agents[name]) for name in DEFAULT_AGENTS
@@ -141,6 +151,8 @@ class SkillsManager:
             and self.state["deployments"]
         ):
             raise ConfigurationError("切换中央目录前，请先停用当前目录中的所有项目")
+        if current and expand_path(current) != library:
+            self.state["project_metadata"] = {}
         self.state["library_path"] = str(library)
         self.save()
         return library
@@ -166,6 +178,102 @@ class SkillsManager:
             if project.name == name:
                 return project
         raise ConfigurationError(f"中央目录中不存在一级文件夹: {name}")
+
+    def project_tags(self, project_name: str) -> list[str]:
+        metadata = self.state["project_metadata"].get(project_name, {})
+        return list(metadata.get("tags", []))
+
+    @staticmethod
+    def normalize_tags(tags: list[str]) -> list[str]:
+        normalized: list[str] = []
+        for tag in tags:
+            value = tag.strip()
+            if not value or value in normalized:
+                continue
+            if len(value) > 30:
+                raise ConfigurationError("每个标签最多 30 个字符")
+            normalized.append(value)
+        if len(normalized) > 12:
+            raise ConfigurationError("每个项目最多设置 12 个标签")
+        return normalized
+
+    def store_project_tags(self, project_name: str, tags: list[str]) -> None:
+        if tags:
+            self.state["project_metadata"][project_name] = {"tags": tags}
+        else:
+            self.state["project_metadata"].pop(project_name, None)
+
+    def set_project_tags(self, project_name: str, tags: list[str]) -> list[str]:
+        self.project(project_name)
+        normalized = self.normalize_tags(tags)
+        self.store_project_tags(project_name, normalized)
+        self.save()
+        return normalized
+
+    def update_project_tags(
+        self,
+        project_names: list[str],
+        tags: list[str],
+        action: str,
+    ) -> dict[str, list[str]]:
+        if action not in {"add", "remove"}:
+            raise ConfigurationError(f"不支持的批量标签操作: {action}")
+        projects = list(dict.fromkeys(project_names))
+        if not projects:
+            raise ConfigurationError("请至少选择一个项目")
+        for project_name in projects:
+            self.project(project_name)
+        normalized = self.normalize_tags(tags)
+        if not normalized:
+            raise ConfigurationError("请至少选择一个标签")
+
+        updated: dict[str, list[str]] = {}
+        for project_name in projects:
+            current = self.project_tags(project_name)
+            if action == "add":
+                result = self.normalize_tags([*current, *normalized])
+            else:
+                result = [tag for tag in current if tag not in normalized]
+            updated[project_name] = result
+        for project_name, result in updated.items():
+            self.store_project_tags(project_name, result)
+        self.save()
+        return updated
+
+    def project_skills(self, project_name: str) -> list[dict[str, str]]:
+        project = self.project(project_name)
+        skills = []
+        for root, directories, files in os.walk(project.path, followlinks=False):
+            directories[:] = sorted(
+                directory
+                for directory in directories
+                if directory not in SKILL_SCAN_IGNORED_DIRS
+                and not (Path(root) / directory).is_symlink()
+            )
+            if "SKILL.md" not in files:
+                continue
+            skill_file = Path(root) / "SKILL.md"
+            relative = skill_file.relative_to(project.path)
+            skills.append(
+                {
+                    "name": (
+                        project.name
+                        if relative.parent == Path(".")
+                        else relative.parent.name
+                    ),
+                    "path": str(relative),
+                }
+            )
+        return sorted(skills, key=lambda skill: skill["path"].lower())
+
+    def project_folder(self, project_name: str, skill_path: str | None = None) -> Path:
+        project = self.project(project_name)
+        if skill_path is None:
+            return project.path
+        for skill in self.project_skills(project_name):
+            if skill["path"] == skill_path:
+                return project.path / Path(skill_path).parent
+        raise ConfigurationError(f"{project_name} 中不存在 Skill: {skill_path}")
 
     def agent_path(self, agent: str) -> Path:
         if agent not in self.agents:
@@ -310,6 +418,7 @@ class SkillsManager:
                 for agent in DEFAULT_AGENTS
             ],
             "projects": [],
+            "tags": [],
             "error": None,
         }
         if not library_value:
@@ -323,6 +432,7 @@ class SkillsManager:
             {
                 "name": project.name,
                 "path": str(project.path),
+                "tags": self.project_tags(project.name),
                 "agents": {
                     agent: self.status(project, agent).to_dict()
                     for agent in DEFAULT_AGENTS
@@ -330,4 +440,12 @@ class SkillsManager:
             }
             for project in projects
         ]
+        result["tags"] = sorted(
+            {
+                tag
+                for project in result["projects"]
+                for tag in project["tags"]
+            },
+            key=str.lower,
+        )
         return result

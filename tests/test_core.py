@@ -48,6 +48,111 @@ class SkillsManagerTest(unittest.TestCase):
         self.assertEqual([project.name for project in projects], ["Idea-Copilot"])
         self.assertEqual(projects[0].path, self.library.resolve() / "Idea-Copilot")
 
+    def test_scans_skill_files_only_when_requested(self):
+        project = self.create_project()
+        (project / "SKILL.md").write_text("root", encoding="utf-8")
+        outside = self.root / "outside"
+        outside.mkdir()
+        (outside / "SKILL.md").write_text("outside", encoding="utf-8")
+        (project / "linked").symlink_to(outside, target_is_directory=True)
+        (project / "node_modules" / "ignored").mkdir(parents=True)
+        (project / "node_modules" / "ignored" / "SKILL.md").write_text(
+            "ignored",
+            encoding="utf-8",
+        )
+
+        skills = self.manager.project_skills("Idea-Copilot")
+
+        self.assertEqual(
+            skills,
+            [
+                {"name": "Idea-Copilot", "path": "SKILL.md"},
+                {"name": "nested", "path": "skills/nested/SKILL.md"},
+            ],
+        )
+
+    def test_project_folder_only_allows_project_and_discovered_skills(self):
+        project = self.create_project()
+
+        self.assertEqual(self.manager.project_folder("Idea-Copilot"), project.resolve())
+        self.assertEqual(
+            self.manager.project_folder(
+                "Idea-Copilot",
+                "skills/nested/SKILL.md",
+            ),
+            project.resolve() / "skills" / "nested",
+        )
+        with self.assertRaises(ConfigurationError):
+            self.manager.project_folder("Idea-Copilot", "../outside/SKILL.md")
+
+    def test_project_tags_are_persisted_and_included_in_dashboard(self):
+        self.create_project()
+
+        tags = self.manager.set_project_tags(
+            "Idea-Copilot",
+            [" 研究 ", "写作", "研究", ""],
+        )
+        reloaded = SkillsManager(StateStore(self.root / "state.json"), self.agent_paths)
+
+        self.assertEqual(tags, ["研究", "写作"])
+        self.assertEqual(reloaded.project_tags("Idea-Copilot"), ["研究", "写作"])
+        self.assertEqual(reloaded.dashboard()["tags"], ["写作", "研究"])
+        self.assertEqual(
+            reloaded.dashboard()["projects"][0]["tags"],
+            ["研究", "写作"],
+        )
+
+    def test_batch_add_and_remove_project_tags(self):
+        self.create_project()
+        self.create_project("Other-Project")
+        self.manager.set_project_tags("Idea-Copilot", ["研究"])
+        self.manager.set_project_tags("Other-Project", ["日常"])
+
+        added = self.manager.update_project_tags(
+            ["Idea-Copilot", "Other-Project"],
+            ["常用"],
+            "add",
+        )
+        removed = self.manager.update_project_tags(
+            ["Idea-Copilot", "Other-Project"],
+            ["研究", "日常"],
+            "remove",
+        )
+
+        self.assertEqual(added["Idea-Copilot"], ["研究", "常用"])
+        self.assertEqual(added["Other-Project"], ["日常", "常用"])
+        self.assertEqual(removed["Idea-Copilot"], ["常用"])
+        self.assertEqual(removed["Other-Project"], ["常用"])
+
+    def test_batch_tags_validate_all_projects_before_saving(self):
+        self.create_project()
+        self.manager.set_project_tags("Idea-Copilot", ["研究"])
+
+        with self.assertRaises(ConfigurationError):
+            self.manager.update_project_tags(
+                ["Idea-Copilot", "Missing-Project"],
+                ["常用"],
+                "add",
+            )
+
+        self.assertEqual(self.manager.project_tags("Idea-Copilot"), ["研究"])
+
+    def test_existing_state_without_project_metadata_remains_compatible(self):
+        self.create_project()
+        store = StateStore(self.root / "legacy-state.json")
+        store.save(
+            {
+                "version": 2,
+                "library_path": str(self.library),
+                "deployments": {},
+            }
+        )
+
+        manager = SkillsManager(store, self.agent_paths)
+        manager.set_project_tags("Idea-Copilot", ["兼容"])
+
+        self.assertEqual(manager.project_tags("Idea-Copilot"), ["兼容"])
+
     def test_enable_and_disable_managed_link(self):
         source = self.create_project()
 
@@ -132,6 +237,16 @@ class SkillsManagerTest(unittest.TestCase):
 
         self.assertEqual(self.manager.library_path(), self.library.resolve())
 
+    def test_switching_library_clears_project_tags(self):
+        self.create_project()
+        self.manager.set_project_tags("Idea-Copilot", ["研究"])
+        other = self.root / "other-library"
+        other.mkdir()
+
+        self.manager.set_library(other)
+
+        self.assertEqual(self.manager.state["project_metadata"], {})
+
     def test_dashboard_contains_two_fixed_agents_and_project_statuses(self):
         self.create_project()
         self.manager.enable("Idea-Copilot", "claude")
@@ -148,4 +263,3 @@ class SkillsManagerTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
