@@ -9,8 +9,8 @@
 5. 进入批量选择模式，为多个项目统一添加或移除标签。
 6. 从项目卡片或 Skill 列表直接在系统文件管理器中打开对应文件夹。
 
-<img src="assets/image.png" width="400" alt="首页截图">
-<img src="assets/image2.png" width="400" alt="另一张截图">
+<img src="assets/image.png" width="600" alt="首页截图">
+<img src="assets/image2.png" width="600" alt="另一张截图">
 
 默认目标目录：
 
