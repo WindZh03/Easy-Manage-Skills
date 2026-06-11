@@ -1,0 +1,221 @@
+:root {
+  color-scheme: light;
+  --bg: #f4f5f1;
+  --card: #ffffff;
+  --ink: #172019;
+  --muted: #667069;
+  --line: #dfe4de;
+  --green: #176b45;
+  --green-soft: #e6f3eb;
+  --amber: #8b5d13;
+  --amber-soft: #fff4d9;
+  --red: #a33b31;
+  --shadow: 0 16px 50px rgba(24, 45, 32, 0.08);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 0%, #e4eee6 0, transparent 28rem),
+    var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.shell {
+  width: min(1080px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 56px 0 80px;
+}
+
+header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(30px, 5vw, 48px);
+  letter-spacing: -0.04em;
+}
+
+.subtitle, .field-help {
+  color: var(--muted);
+}
+
+.library-card, .projects {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.library-card {
+  padding: 22px;
+  margin-bottom: 14px;
+}
+
+label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+form {
+  display: flex;
+  gap: 10px;
+}
+
+input {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfcfa;
+  color: var(--ink);
+  font-size: 15px;
+  outline: none;
+}
+
+input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(23, 107, 69, 0.12);
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  background: var(--green);
+  color: white;
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover { filter: brightness(0.96); }
+button:disabled { cursor: wait; opacity: 0.6; }
+
+button.secondary {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+}
+
+.field-help {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+
+#message {
+  min-height: 44px;
+  padding: 13px 2px 8px;
+  color: var(--red);
+  font-size: 14px;
+}
+
+.projects {
+  overflow: hidden;
+}
+
+.project-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 220px 220px;
+  align-items: center;
+  min-height: 82px;
+  border-bottom: 1px solid var(--line);
+}
+
+.project-row:last-child { border-bottom: 0; }
+.project-row > div { padding: 18px 22px; }
+
+.project-name {
+  font-size: 16px;
+  font-weight: 780;
+}
+
+.project-path {
+  overflow: hidden;
+  margin-top: 5px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-heading {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.agent-cell {
+  border-left: 1px solid var(--line);
+}
+
+.toggle-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle {
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--green);
+}
+
+.state {
+  display: inline-flex;
+  margin-top: 7px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.state.disabled { background: #eef0ed; color: var(--muted); }
+.state.conflict, .state.external { background: var(--amber-soft); color: var(--amber); }
+.state.missing { background: #fce9e7; color: var(--red); }
+
+.empty {
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .shell { padding-top: 30px; }
+  header { align-items: stretch; flex-direction: column; }
+  form { flex-direction: column; }
+  .project-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .project-row > div:first-child {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--line);
+  }
+  .agent-cell:nth-child(3) { border-left: 0; }
+}
+
